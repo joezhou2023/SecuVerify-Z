@@ -39,7 +39,7 @@
 │       │            │              │          │
 │  ┌────┴────────────┴──────────────┴───────┐  │
 │  │         LLM Service Layer              │  │
-│  │  DeepSeek / Qwen / ERNIE / Pollinations  │  │
+│  │            DeepSeek / Pollinations  │  │
 │  └────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────┐  │
 │  │     ISO 27001 Knowledge Base           │  │
