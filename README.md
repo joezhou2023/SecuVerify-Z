@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-「安鉴·周 / SecuVerify-Z」是一款专为 ISO 27001 信息安全管理体系审核员设计的 AI 辅助工具。通过大模型（DeepSeek / 通义千问 / 文心一言 / Pollinations）驱动，提供三大核心功能：
+「安鉴·周 / SecuVerify-Z」是一款专为 ISO 27001 信息安全管理体系审核员设计的 AI 辅助工具。通过大模型（DeepSeek / Pollinations ）驱动，提供三大核心功能：
 
 | 功能 | 说明 |
 |------|------|
@@ -58,7 +58,7 @@
 
 - Python 3.10+
 - Node.js 18+
-- 国内大模型 API Key（推荐 DeepSeek）
+- AI大模型 API Key
 
 ### 1. 克隆项目
 
@@ -86,10 +86,6 @@ cp .env.example .env
 # DeepSeek（推荐，性价比高）
 DEEPSEEK_API_KEY=sk-your-api-key-here
 LLM_PROVIDER=deepseek
-
-# 或使用通义千问
-# DASHSCOPE_API_KEY=your-key
-# LLM_PROVIDER=qwen
 
 # 或使用 Pollinations.ai
 # POLLINATIONS_API_KEY=sk_your_key
@@ -198,8 +194,6 @@ secuverify-z/
 | 提供商 | 环境变量 | 说明 |
 |--------|---------|------|
 | DeepSeek | `DEEPSEEK_API_KEY` | 推荐，性价比高，OpenAI 兼容接口 |
-| 通义千问 | `DASHSCOPE_API_KEY` | 阿里云，中文能力强 |
-| 文心一言 | `ERNIE_API_KEY` + `ERNIE_SECRET_KEY` | 百度，国内合规友好 |
 | Pollinations | `POLLINATIONS_API_KEY` | OpenAI 兼容接口，多模型聚合平台 |
 
 ## 免责声明
