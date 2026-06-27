@@ -14,6 +14,7 @@ export const translations = {
     tabs: {
       chat: "对话审核",
       file: "文件审核",
+      record: "审核记录",
       clause: "条款匹配",
     },
     chat: {
@@ -99,6 +100,18 @@ export const translations = {
       judgmentExplanation: "判定说明",
       improvementSuggestions: "改进建议",
     },
+    auditRecord: {
+      title: "审核记录",
+      description: "输入条款号和审核信息，AI 按标准格式自动生成审核记录",
+      clause: "审核依据",
+      colClause: "审核要素/体系文件",
+      colMethod: "检查事项和方法",
+      colRecord: "检查或跟踪记录",
+      methodLabel: "审核方法",
+      judgmentLabel: "判定说明",
+      improveLabel: "改进建议",
+      defaultHint: "默认输出为符合性判定。如需输出观察项或不符合项，请在审核信息描述中明确指出。",
+    },
   },
   en: {
     app: {
@@ -113,6 +126,7 @@ export const translations = {
     tabs: {
       chat: "Chat Audit",
       file: "File Audit",
+      record: "Audit Record",
       clause: "Clause Match",
     },
     chat: {
@@ -199,6 +213,18 @@ export const translations = {
       auditEvidence: "Audit Evidence",
       judgmentExplanation: "Judgment Explanation",
       improvementSuggestions: "Improvement Suggestions",
+    },
+    auditRecord: {
+      title: "Audit Record",
+      description: "Enter clause number and audit information, AI generates structured audit records",
+      clause: "Audit Basis",
+      colClause: "Clause / Document Reference",
+      colMethod: "Inspection Items & Methods",
+      colRecord: "Inspection or Tracking Record",
+      methodLabel: "Audit Method",
+      judgmentLabel: "Judgment Explanation",
+      improveLabel: "Improvement Suggestions",
+      defaultHint: "Output defaults to Conforming. To get Observation or Non-conforming, explicitly state it in the audit information.",
     },
   },
 } as const;

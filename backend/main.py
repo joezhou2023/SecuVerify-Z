@@ -18,7 +18,7 @@ load_dotenv()
 app = FastAPI(
     title="安鉴·周 / SecuVerify-Z",
     description="ISO 27001 AI 审核助手 — 文件审核、条款匹配、对话式审核引导",
-    version="1.4.0",
+    version="1.5.0",
 )
 
 # CORS 配置
@@ -69,7 +69,7 @@ else:
     async def root():
         return {
             "name": "安鉴·周 / SecuVerify-Z",
-            "version": "1.4.0",
+            "version": "1.5.0",
             "description": "ISO 27001 AI 审核助手",
             "docs": "/docs",
         }

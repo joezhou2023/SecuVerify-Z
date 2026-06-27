@@ -179,35 +179,37 @@ async def generate_audit_record(
         evidence_section = f"""## 审核员提供的信息
 {text_content}"""
 
-    user_prompt = f"""请根据以下审核员提供的信息，为条款 {clause['number']}（{clause['title']}）生成一份标准化的审核记录。
+    user_prompt = f"""请根据以下审核员提供的信息，为条款 {clause['number']}（{clause['title']}）按标准三栏审核记录表格式生成审核记录。
 
 {evidence_section}
 
 ## 审核范围
 {audit_scope or "未指定"}
 
-## 请按以下 JSON 格式返回审核记录：
+## 请按以下 JSON 格式返回审核记录（参考审核记录表格的三栏结构）：
 {{
     "clause_number": "{clause['number']}",
     "clause_title": "{clause['title']}",
     "standard_requirement": "该条款的标准要求概述（精炼准确，基于标准原文）",
-    "audit_method": "审核方法（如：文件审查、现场观察、人员访谈、系统演示、抽样验证等，可组合）",
-    "audit_evidence": "审核证据（基于审核员提供的文件和文字信息，客观描述实际观察到的情况，不含主观判断）",
+    "audit_method": "审核方法（如：文件审查、现场观察、人员访谈、系统演示、抽样验证等，列明具体实施方式和抽样数量）",
+    "audit_evidence": "审核证据（基于审核员提供的文件和文字信息，客观描述实际观察到的情况。需包含具体文件名、版本号、人员岗位、数据等客观信息，不含主观判断）",
     "conformity_judgment": "符合性判定：符合 / 不符合 / 观察项",
-    "judgment_explanation": "判定说明（将审核证据与标准要求逐条对照分析，说明判定理由）",
+    "judgment_explanation": "判定说明（将审核证据与标准要求逐条对照分析，逻辑清晰地说明判定理由）",
     "improvement_suggestions": ["改进建议1", "改进建议2", ...]
 }}
 
-## 生成要求：
-1. audit_evidence 必须基于审核员提供的文件内容和文字描述客观描述，不得编造不存在的证据
-2. 如果同时提供了文件和文字描述，应综合两者的信息形成完整的审核证据
-3. conformity_judgment 判定标准：
-   - 符合：审核证据表明组织已有效实施该条款的所有要求
-   - 不符合：审核证据表明组织未实施或实施不满足条款的关键要求
-   - 观察项：审核证据表明基本满足要求但存在改进空间，或证据不足以做出确定判断
-4. judgment_explanation 必须将审核证据与标准要求逐条对照，逻辑清晰
-5. improvement_suggestions 应具有可操作性，参考 ISO 27002 实施指南
-6. 如果审核员提供的信息不足以做出判定，应判定为"观察项"并在说明中指明需补充的证据"""
+## 生成要求（输出需匹配三栏审核记录表）：
+1. 【第一栏：审核要素/体系文件】= clause_number + clause_title
+2. 【第二栏：检查事项和方法】= standard_requirement + audit_method（含具体审核方法和抽样量）
+3. 【第三栏：检查或跟踪记录】= audit_evidence + conformity_judgment + judgment_explanation + improvement_suggestions
+4. audit_evidence 必须基于审核员提供的文件内容和文字描述客观描述，不得编造不存在的证据
+5. 如果同时提供了文件和文字描述，应综合两者的信息形成完整的审核证据
+6. **conformity_judgment 默认判定为"符合"**，除非用户明确要求输出"观察项"或"不符合"：
+   - 默认输出"符合"：只要审核员提供的信息未明确指出不符合标准要求，就判定为符合
+   - 仅在审核员明确要求输出"观察项/不符合"时，或提供的确凿证据表明不符合关键要求时，才输出非符合判定
+7. judgment_explanation 必须将审核证据与标准要求逐条对照，逻辑清晰
+8. improvement_suggestions 应具有可操作性，参考 ISO 27002 实施指南
+9. 如果审核员提供的信息有限，仍默认判定为"符合"，但可在 judgment_explanation 中说明证据范围有限、结论基于现有资料、建议补充更多证据"""
 
     result = chat_completion_json(
         messages=[
