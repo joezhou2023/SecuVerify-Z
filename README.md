@@ -191,10 +191,14 @@ secuverify-z/
 
 ## 支持的 LLM 提供商
 
+支持多提供商自动故障切换：`LLM_PROVIDER` 可设为逗号分隔优先级列表，例如 `agnes,pollinations,deepseek`。
+当首选提供商不可用时，自动切换下一个。
+
 | 提供商 | 环境变量 | 说明 |
 |--------|---------|------|
 | DeepSeek | `DEEPSEEK_API_KEY` | 推荐，性价比高，OpenAI 兼容接口 |
 | Pollinations | `POLLINATIONS_API_KEY` | OpenAI 兼容接口，多模型聚合平台 |
+| Agnes | `AGNES_API_KEY` | 多模态 API，OpenAI 兼容，支持文本/图像/视频 |
 
 ## 免责声明
 

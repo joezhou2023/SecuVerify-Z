@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from routers import chat, file_audit, clause_match
+from middleware.ip_rate_limit import IPRateLimitMiddleware
 
 # 加载环境变量
 load_dotenv()
@@ -43,6 +44,20 @@ IS_PROD = STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists()
 app.include_router(chat.router, prefix="/api/chat", tags=["对话审核"])
 app.include_router(file_audit.router, prefix="/api/file-audit", tags=["文件审核"])
 app.include_router(clause_match.router, prefix="/api/clause-match", tags=["条款匹配"])
+
+
+# 匿名按 IP 限流 + 自然日配额（直接拒绝：429/403）
+# 内存版：单进程生效；多进程/多实例建议改 Redis 版
+route_key_rules = {
+    "chat": {"requests_per_minute": 15, "requests_per_day": 300},
+    "clause_match": {"requests_per_minute": 10, "requests_per_day": 200},
+    "file_audit_upload": {"requests_per_minute": 3, "requests_per_day": 50},
+}
+
+@app.middleware("http")
+async def ip_rate_limit_middleware(request, call_next):
+    middleware = IPRateLimitMiddleware(app, route_key_rules)
+    return await middleware(request, call_next)
 
 
 @app.get("/api/health")

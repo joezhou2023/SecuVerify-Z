@@ -1,21 +1,24 @@
 """
 LLM 服务层 — 封装大模型 API 调用
-支持 DeepSeek / Pollinations，统一接口
+支持 DeepSeek / Pollinations / Agnes，统一接口，自动故障切换
 """
+
 import os
 import json
+import logging
 from typing import Optional
-from openai import OpenAI
+from openai import OpenAI, APIError
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# 初始化 LLM 客户端
-_LLM_PROVIDER = os.getenv("LLM_PROVIDER", "deepseek")
+# 日志记录器
+logger = logging.getLogger("secuverify.llm")
 
 # 各提供商配置
 _PROVIDERS = {
     "deepseek": {
+        "name": "DeepSeek",
         "api_key_env": "DEEPSEEK_API_KEY",
         "base_url_env": "DEEPSEEK_BASE_URL",
         "model_env": "DEEPSEEK_MODEL",
@@ -23,29 +26,145 @@ _PROVIDERS = {
         "default_model": "deepseek-chat",
     },
     "pollinations": {
+        "name": "Pollinations",
         "api_key_env": "POLLINATIONS_API_KEY",
         "base_url_env": "POLLINATIONS_BASE_URL",
         "model_env": "POLLINATIONS_MODEL",
         "default_base_url": "https://gen.pollinations.ai/v1",
         "default_model": "openai",
     },
+    "agnes": {
+        "name": "Agnes",
+        "api_key_env": "AGNES_API_KEY",
+        "base_url_env": "AGNES_BASE_URL",
+        "model_env": "AGNES_MODEL",
+        "default_base_url": "https://apihub.agnes-ai.com/v1",
+        "default_model": "agnes-2.0-flash",
+    },
 }
 
 
-def _get_client() -> tuple[OpenAI, str]:
-    """获取 LLM 客户端和模型名称"""
-    config = _PROVIDERS.get(_LLM_PROVIDER, _PROVIDERS["deepseek"])
+def _get_provider_list() -> list[str]:
+    """获取提供商优先级列表（逗号分隔），自动过滤未配置 API Key 的提供商"""
+    raw = os.getenv("LLM_PROVIDER", "deepseek")
+    # 解析逗号分隔列表
+    candidates = [p.strip() for p in raw.split(",") if p.strip()]
+    # 过滤：只保留有 API Key 且配置存在的提供商
+    valid = []
+    for name in candidates:
+        config = _PROVIDERS.get(name)
+        if not config:
+            logger.warning("未知的 LLM 提供商: %s，已跳过", name)
+            continue
+        api_key = os.getenv(config["api_key_env"], "")
+        if not api_key:
+            logger.warning("提供商 %s 未配置 API Key（%s），已跳过", name, config["api_key_env"])
+            continue
+        valid.append(name)
+
+    if not valid:
+        # 如果全都不可用，回退到 deepseek（可能也会失败但给出明确错误）
+        fallback = "deepseek"
+        if fallback in _PROVIDERS:
+            valid.append(fallback)
+    return valid
+
+
+def _try_provider(provider_name: str, **kwargs) -> Optional[tuple]:
+    """尝试用指定提供商调用 LLM，成功返回 (client, model)，失败返回 None"""
+    config = _PROVIDERS[provider_name]
     api_key = os.getenv(config["api_key_env"], "")
     base_url = os.getenv(config["base_url_env"], config["default_base_url"])
     model = os.getenv(config["model_env"], config["default_model"])
 
-    if not api_key:
-        raise ValueError(
-            f"未配置 {_LLM_PROVIDER} 的 API Key，请在 .env 文件中设置 {config['api_key_env']}"
+    try:
+        client = OpenAI(api_key=api_key, base_url=base_url, timeout=60)
+        # 发一个轻量请求验证连通性（messages 必须有内容）
+        test_resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=5,
+            temperature=0,
         )
+        _ = test_resp.choices[0].message.content
+        logger.info("提供商 %s 连通成功（%s）", provider_name, config.get("name", provider_name))
+        return client, model
+    except Exception as e:
+        logger.warning("提供商 %s 不可用（%s）: %s", provider_name, config.get("name", provider_name), str(e))
+        return None
 
-    client = OpenAI(api_key=api_key, base_url=base_url)
-    return client, model
+
+def _get_client() -> tuple[OpenAI, str, str]:
+    """获取第一个可用的 LLM 客户端和模型名称，带自动故障切换"""
+    providers = _get_provider_list()
+    errors = []
+
+    for pname in providers:
+        result = _try_provider(pname)
+        if result is not None:
+            client, model = result
+            config = _PROVIDERS[pname]
+            logger.info("当前使用提供商: %s，模型: %s", config.get("name", pname), model)
+            return (client, model, pname)  # 返回三元组，第三个是提供商名
+
+        config = _PROVIDERS.get(pname, {})
+        errors.append(f"{config.get('name', pname)}: 不可用")
+
+    # 全部失败
+    raise ConnectionError(
+        f"所有 LLM 提供商均不可用（{' → '.join(errors)}）。"
+        "请检查 API Key 配置和网络连接。"
+    )
+
+
+def _try_call_with_failover(
+    call_fn, messages, temperature, max_tokens, response_format=None
+):
+    """带故障切换的 LLM 调用：按优先级依次尝试每个提供商"""
+    providers = _get_provider_list()
+    errors = []
+
+    for pname in providers:
+        config = _PROVIDERS[pname]
+        api_key = os.getenv(config["api_key_env"], "")
+        base_url = os.getenv(config["base_url_env"], config["default_base_url"])
+        model = os.getenv(config["model_env"], config["default_model"])
+
+        try:
+            client = OpenAI(api_key=api_key, base_url=base_url, timeout=120)
+            logger.info("尝试调用 %s（%s），模型: %s", pname, config.get("name", pname), model)
+
+            result = call_fn(client, model, messages, temperature, max_tokens, response_format)
+            logger.info("提供商 %s 调用成功", config.get("name", pname))
+            return result
+
+        except Exception as e:
+            err_msg = f"{config.get('name', pname)}: {str(e)}"
+            logger.warning("提供商 %s 调用失败: %s", config.get("name", pname), str(e))
+            errors.append(err_msg)
+            continue
+
+    # 全部失败
+    raise ConnectionError(
+        f"所有 LLM 提供商调用均失败:\n" + "\n".join(f"  - {e}" for e in errors)
+    )
+
+
+def _chat_call(
+    client: OpenAI, model: str, messages: list, temperature: float,
+    max_tokens: int, response_format: Optional[dict]
+) -> str:
+    """执行一次 chat.completions.create 调用"""
+    kwargs = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if response_format:
+        kwargs["response_format"] = response_format
+    response = client.chat.completions.create(**kwargs)
+    return response.choices[0].message.content
 
 
 def chat_completion(
@@ -55,7 +174,7 @@ def chat_completion(
     response_format: Optional[dict] = None,
 ) -> str:
     """
-    调用 LLM 完成对话
+    调用 LLM 完成对话（自动故障切换）
 
     Args:
         messages: OpenAI 格式的消息列表
@@ -66,29 +185,16 @@ def chat_completion(
     Returns:
         LLM 回复文本
     """
-    client, model = _get_client()
-
-    kwargs = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-    if response_format:
-        kwargs["response_format"] = response_format
-
-    response = client.chat.completions.create(**kwargs)
-    return response.choices[0].message.content
+    return _try_call_with_failover(
+        _chat_call, messages, temperature, max_tokens, response_format
+    )
 
 
-def chat_completion_json(
-    messages: list[dict],
-    temperature: float = 0.3,
-    max_tokens: int = 4096,
+def _chat_json_call(
+    client: OpenAI, model: str, messages: list, temperature: float,
+    max_tokens: int, response_format: Optional[dict]
 ) -> dict:
-    """调用 LLM 并返回 JSON 格式结果"""
-    client, model = _get_client()
-
+    """执行一次 JSON 格式的 chat.completions.create 调用"""
     response = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -98,6 +204,17 @@ def chat_completion_json(
     )
     content = response.choices[0].message.content
     return json.loads(content)
+
+
+def chat_completion_json(
+    messages: list[dict],
+    temperature: float = 0.3,
+    max_tokens: int = 4096,
+) -> dict:
+    """调用 LLM 并返回 JSON 格式结果（自动故障切换）"""
+    return _try_call_with_failover(
+        _chat_json_call, messages, temperature, max_tokens
+    )
 
 
 def get_system_prompt(audit_context: Optional[str] = None) -> str:
